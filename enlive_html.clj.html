@@ -1,0 +1,700 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>~/enlive/src/net/cgrand/enlive_html.clj.html</title>
+<meta name="Generator" content="Vim/7.2">
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+</head>
+<body bgcolor="#333333" text="#ffffff"><font face="monospace">
+<font color="#87ceeb">;&nbsp;&nbsp; Copyright (c) Christophe Grand, 2009. All rights reserved.</font><br>
+<br>
+<font color="#87ceeb">;&nbsp;&nbsp; The use and distribution terms for this software are covered by the</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; Eclipse Public License 1.0 (<a href="http://opensource.org/licenses/eclipse-1.0.php)">http://opensource.org/licenses/eclipse-1.0.php)</a></font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; which can be found in the file epl-v10.html at the root of this </font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; distribution.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; By using this software in any fashion, you are agreeing to be bound by</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; the terms of this license.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; You must not remove this notice, or any other, from this software.</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">ns</font>&nbsp;net.cgrand.enlive-html<br>
+&nbsp;&nbsp;<font color="#ffa0a0">&quot;enlive-html is a selector-based transformation and extraction engine.&quot;</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:require</b></font>&nbsp;<font color="#ffdead">[</font>net.cgrand.xml <font color="#f0e68c"><b>:as</b></font>&nbsp;xml<font color="#ffdead">])</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:require</b></font>&nbsp;<font color="#ffdead">[</font>clojure.zip <font color="#f0e68c"><b>:as</b></font>&nbsp;z<font color="#ffdead">])</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:require</b></font>&nbsp;<font color="#ffdead">[</font>net.cgrand.enlive-html.state-machine <font color="#f0e68c"><b>:as</b></font>&nbsp;sm<font color="#ffdead">]))</font><br>
+<br>
+<font color="#87ceeb">;; EXAMPLES: see net.cgrand.enlive-html.examples</font><br>
+<br>
+<font color="#87ceeb">;; HTML I/O stuff</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;startparse-tagsoup <font color="#ffdead">[</font>s ch<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">doto</font>&nbsp;<font color="#ffdead">(</font>org.ccil.cowan.tagsoup.Parser.<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setFeature <font color="#ffa0a0">&quot;<a href="http://www.ccil.org/~cowan/tagsoup/features/default-attributes">http://www.ccil.org/~cowan/tagsoup/features/default-attributes</a>&quot;</font>&nbsp;<font color="#ffa0a0">false</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setFeature <font color="#ffa0a0">&quot;<a href="http://www.ccil.org/~cowan/tagsoup/features/cdata-elements">http://www.ccil.org/~cowan/tagsoup/features/cdata-elements</a>&quot;</font>&nbsp;<font color="#ffa0a0">true</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setFeature <font color="#ffa0a0">&quot;<a href="http://www.ccil.org/~cowan/tagsoup/features/ignorable-whitespace">http://www.ccil.org/~cowan/tagsoup/features/ignorable-whitespace</a>&quot;</font>&nbsp;<font color="#ffa0a0">true</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setContentHandler ch<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setProperty <font color="#ffa0a0">&quot;<a href="http://www.ccil.org/~cowan/tagsoup/properties/auto-detector">http://www.ccil.org/~cowan/tagsoup/properties/auto-detector</a>&quot;</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">proxy</font>&nbsp;<font color="#ffdead">[</font>org.ccil.cowan.tagsoup.AutoDetector<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">[]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>autoDetectingReader <font color="#ffdead">[</font><font color="#ffdead">#^</font>java.io.InputStream is<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>java.io.InputStreamReader. is <font color="#ffa0a0">&quot;UTF-8&quot;</font><font color="#ffdead">))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setProperty <font color="#ffa0a0">&quot;<a href="http://xml.org/sax/properties/lexical-handler">http://xml.org/sax/properties/lexical-handler</a>&quot;</font>&nbsp;ch<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.parse s<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;load-html-resource <br>
+&nbsp;<font color="#ffa0a0">&quot;Loads and parse an HTML resource and closes the stream.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>stream<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;<font color="#98fb98">map?</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">with-open</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">#^</font>java.io.Closeable stream stream<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/parse <font color="#ffdead">(</font>org.xml.sax.InputSource. stream<font color="#ffdead">)</font>&nbsp;startparse-tagsoup<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;load-xml-resource <br>
+&nbsp;<font color="#ffa0a0">&quot;Loads and parse a XML resource and closes the stream.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>stream<font color="#ffdead">]</font>&nbsp;<br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">with-open</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">#^</font>java.io.Closeable stream stream<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/parse <font color="#ffdead">(</font>org.xml.sax.InputSource. stream<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmulti</font>&nbsp;<font color="#ffdead">#^</font><font color="#ffdead">{</font><font color="#f0e68c"><b>:arglists</b></font>&nbsp;<font color="#ffdead">'</font><font color="#ffdead">([</font>resource loader<font color="#ffdead">])}</font>&nbsp;get-resource <br>
+&nbsp;<font color="#ffa0a0">&quot;Loads a resource, using the specified loader. Returns a seq of nodes.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>res _<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">type</font>&nbsp;res<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;html-resource <br>
+&nbsp;<font color="#ffa0a0">&quot;Loads an HTML resource, returns a seq of nodes.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>resource<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>get-resource resource load-html-resource<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;xml-resource <br>
+&nbsp;<font color="#ffa0a0">&quot;Loads an XML resource, returns a seq of nodes.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>resource<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>get-resource resource load-xml-resource<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource clojure.lang.IPersistentMap<br>
+&nbsp;<font color="#ffdead">[</font>xml-data _<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">list</font>&nbsp;xml-data<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource clojure.lang.IPersistentCollection<br>
+&nbsp;<font color="#ffdead">[</font>nodes _<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;nodes<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource String<br>
+&nbsp;<font color="#ffdead">[</font>path loader<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">(</font>clojure.lang.RT/baseLoader<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>.getResourceAsStream path<font color="#ffdead">)</font>&nbsp;loader<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource java.io.File<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">#^</font>java.io.File file loader<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>loader <font color="#ffdead">(</font>java.io.FileInputStream. file<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource java.io.Reader<br>
+&nbsp;<font color="#ffdead">[</font>reader loader<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>loader reader<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource java.io.InputStream<br>
+&nbsp;<font color="#ffdead">[</font>stream loader<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>loader stream<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource java.net.URL<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">#^</font>java.net.URL url loader<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>loader <font color="#ffdead">(</font>.getContent url<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;get-resource java.net.URI<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">#^</font>java.net.URI uri loader<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>get-resource <font color="#ffdead">(</font>.toURL uri<font color="#ffdead">)</font>&nbsp;loader<font color="#ffdead">))</font><br>
+<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;xml-str<br>
+&nbsp;<font color="#ffa0a0">&quot;Like clojure.core/str but escapes &lt; &gt; and &amp;.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>x<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;x <font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;&amp;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;amp;&quot;</font><font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;&lt;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;lt;&quot;</font><font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;&gt;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;gt;&quot;</font><font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;attr-str<br>
+&nbsp;<font color="#ffa0a0">&quot;Like clojure.core/str but escapes &lt; &gt; &amp; and \&quot;.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>x<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;x <font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;&amp;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;amp;&quot;</font><font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;&lt;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;lt;&quot;</font><font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;&gt;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;gt;&quot;</font><font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>.replace <font color="#ffa0a0">&quot;\&quot;&quot;</font>&nbsp;<font color="#ffa0a0">&quot;&amp;quot;&quot;</font><font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;*self-closing-tags* <font color="#ffdead">#{</font><font color="#f0e68c"><b>:area</b></font>&nbsp;<font color="#f0e68c"><b>:base</b></font>&nbsp;<font color="#f0e68c"><b>:basefont</b></font>&nbsp;<font color="#f0e68c"><b>:br</b></font>&nbsp;<font color="#f0e68c"><b>:hr</b></font>&nbsp;<font color="#f0e68c"><b>:input</b></font>&nbsp;<font color="#f0e68c"><b>:img</b></font>&nbsp;<font color="#f0e68c"><b>:link</b></font>&nbsp;<font color="#f0e68c"><b>:meta</b></font><font color="#ffdead">})</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">declare</font>&nbsp;emit<font color="#ffdead">)</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-attrs <font color="#ffdead">[</font>attrs<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[[</font>k v<font color="#ffdead">]]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot; &quot;</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">name</font>&nbsp;k<font color="#ffdead">)</font>&nbsp;<font color="#ffa0a0">&quot;=\&quot;&quot;</font>&nbsp;<font color="#ffdead">(</font>attr-str v<font color="#ffdead">)</font>&nbsp;<font color="#ffa0a0">&quot;\&quot;&quot;</font><font color="#ffdead">])</font>&nbsp;attrs<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;content-emitter <font color="#ffdead">[</font>tag-name<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(#{</font><font color="#ffa0a0">&quot;script&quot;</font>&nbsp;<font color="#ffa0a0">&quot;style&quot;</font><font color="#ffdead">}</font>&nbsp;tag-name<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>x<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">[(</font><font color="#98fb98">str</font>&nbsp;x<font color="#ffdead">)])</font>&nbsp;emit<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-tag <font color="#ffdead">[</font>tag<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font><font color="#98fb98">name</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;tag <font color="#f0e68c"><b>:tag</b></font>&nbsp;<font color="#98fb98">name</font><font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot;&lt;&quot;</font>&nbsp;<font color="#98fb98">name</font><font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>emit-attrs <font color="#ffdead">(</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;tag<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>if-let</b></font>&nbsp;<font color="#ffdead">[</font>s <font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:content</b></font>&nbsp;tag<font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot;&gt;&quot;</font><font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;<font color="#ffdead">(</font>content-emitter <font color="#98fb98">name</font><font color="#ffdead">)</font>&nbsp;s<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot;&lt;/&quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;<font color="#ffa0a0">&quot;&gt;&quot;</font><font color="#ffdead">])</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font>*self-closing-tags* <font color="#ffdead">(</font><font color="#f0e68c"><b>:tag</b></font>&nbsp;tag<font color="#ffdead">))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot; /&gt;&quot;</font><font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot;&gt;&lt;/&quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;<font color="#ffa0a0">&quot;&gt;&quot;</font><font color="#ffdead">])))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-comment <font color="#ffdead">[</font>node<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot;&lt;!--&quot;</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:data</b></font>&nbsp;node<font color="#ffdead">))</font>&nbsp;<font color="#ffa0a0">&quot;--&gt;&quot;</font><font color="#ffdead">])</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;annotations <font color="#ffdead">[</font>x<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;x <font color="#98fb98">meta</font>&nbsp;<font color="#f0e68c"><b>::annotations</b></font><font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit <font color="#ffdead">[</font>node<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>cond</b></font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/tag? node<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">((</font><font color="#f0e68c"><b>:emit</b></font>&nbsp;<font color="#ffdead">(</font>annotations node<font color="#ffdead">)</font>&nbsp;emit-tag<font color="#ffdead">)</font>&nbsp;node<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/comment? node<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>emit-comment node<font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#f0e68c"><b>:else</b></font>&nbsp;<font color="#ffdead">[(</font>xml-str node<font color="#ffdead">)]))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-root <font color="#ffdead">[</font>node<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>if-let</b></font>&nbsp;<font color="#ffdead">[[</font><font color="#98fb98">name</font>&nbsp;public-id system-id<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;node <font color="#98fb98">meta</font>&nbsp;<font color="#f0e68c"><b>::xml/dtd</b></font><font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>preamble <font color="#ffdead">(</font><font color="#f0e68c"><b>cond</b></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; public-id <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;!DOCTYPE &quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;<font color="#ffa0a0">&quot; PUBLIC \&quot;&quot;</font>&nbsp;public-id <font color="#ffa0a0">&quot;\&quot;\n&nbsp;&nbsp;&nbsp;&nbsp;\&quot;&quot;</font>&nbsp;system-id <font color="#ffa0a0">&quot;\&quot;&gt;\n&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; system-id&nbsp;&nbsp; <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;!DOCTYPE &quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;<font color="#ffa0a0">&quot; SYSTEM \&quot;&quot;</font>&nbsp;system-id <font color="#ffa0a0">&quot;\&quot;&gt;\n&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#f0e68c"><b>:else</b></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;!DOCTYPE &quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;<font color="#ffa0a0">&quot;&gt;\n&quot;</font><font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">cons</font>&nbsp;preamble <font color="#ffdead">(</font>emit node<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>emit node<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;emit* <font color="#ffdead">[</font>node-or-nodes<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font>xml/tag? node-or-nodes<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>emit-root node-or-nodes<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;emit-root node-or-nodes<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;tag-emitter <font color="#ffdead">[{</font><font color="#f0e68c"><b>:keys</b></font>&nbsp;<font color="#ffdead">[</font>tag content attrs<font color="#ffdead">]</font>&nbsp;<font color="#f0e68c"><b>:as</b></font>&nbsp;node<font color="#ffdead">}]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font><font color="#98fb98">name</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">name</font>&nbsp;tag<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;attrs-str <font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>emit-attrs attrs<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;open <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;&quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;attrs-str <font color="#ffa0a0">&quot;&gt;&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;close <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;/&quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;<font color="#ffa0a0">&quot;&gt;&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#98fb98">empty</font>&nbsp;<font color="#ffdead">[(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font>*self-closing-tags* tag<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;&quot;</font>&nbsp;<font color="#98fb98">name</font>&nbsp;attrs-str <font color="#ffa0a0">&quot; /&gt;&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">str</font>&nbsp;open close<font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;open <font color="#ffdead">[</font>open<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;close <font color="#ffdead">[</font>close<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;emit <font color="#ffdead">(</font>content-emitter <font color="#98fb98">name</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;full <font color="#ffdead">[(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>emit-tag node<font color="#ffdead">))]]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>elt<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>cond</b></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;node elt<font color="#ffdead">)</font>&nbsp;full<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;tag <font color="#ffdead">(</font><font color="#f0e68c"><b>:tag</b></font>&nbsp;elt<font color="#ffdead">))</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;attrs <font color="#ffdead">(</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;elt<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>if-let</b></font>&nbsp;<font color="#ffdead">[</font>content <font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:content</b></font>&nbsp;elt<font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;open <font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;emit content<font color="#ffdead">)</font>&nbsp;close<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#98fb98">empty</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#f0e68c"><b>:else</b></font>&nbsp;<font color="#ffdead">(</font>emit-tag elt<font color="#ffdead">)))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;comment-emitter <font color="#ffdead">[{</font>data <font color="#f0e68c"><b>:data</b></font>&nbsp;<font color="#f0e68c"><b>:as</b></font>&nbsp;node<font color="#ffdead">}]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>s <font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>emit-comment node<font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;node %<font color="#ffdead">)</font>&nbsp;s <font color="#ffdead">(</font>emit-comment node<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;annotate <font color="#ffdead">[</font>node<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>cond</b></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/tag? node<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>node <font color="#ffdead">(</font><font color="#98fb98">update-in</font>&nbsp;node <font color="#ffdead">[</font><font color="#f0e68c"><b>:content</b></font><font color="#ffdead">]</font>&nbsp;<font color="#ffdead">#(</font><font color="#f0e68c"><b>map</b></font>&nbsp;annotate <font color="#ffdead">%</font><font color="#ffdead">))]</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">vary-meta</font>&nbsp;node <font color="#98fb98">assoc</font>&nbsp;<font color="#f0e68c"><b>::annotations</b></font>&nbsp;<font color="#ffdead">{</font><font color="#f0e68c"><b>:emit</b></font>&nbsp;<font color="#ffdead">(</font>tag-emitter node<font color="#ffdead">)}))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/comment? node<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">vary-meta</font>&nbsp;node <font color="#98fb98">assoc</font>&nbsp;<font color="#f0e68c"><b>::annotations</b></font>&nbsp;<font color="#ffdead">{</font><font color="#f0e68c"><b>:emit</b></font>&nbsp;<font color="#ffdead">(</font><font color="#87ceeb">comment-emitter node</font><font color="#ffdead">)})</font>&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#f0e68c"><b>:else</b></font>&nbsp;node<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#87ceeb">;; utilities</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;not-node? <font color="#ffdead">[</font>x<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">not</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">or</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">string?</font>&nbsp;x<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">map?</font>&nbsp;x<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;flatten <font color="#ffdead">[</font>x<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">remove</font>&nbsp;not-node? <font color="#ffdead">(</font><font color="#98fb98">tree-seq</font>&nbsp;not-node? <font color="#98fb98">seq</font>&nbsp;x<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;flatmap <font color="#ffdead">[</font>f xs<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>flatten <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;f xs<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;attr-values <br>
+&nbsp;<font color="#ffa0a0">&quot;Returns the whitespace-separated values of the specified attr as a set.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>node attr<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">disj</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">set</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;node <font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#ffdead">(</font>attr <font color="#ffa0a0">&quot;&quot;</font><font color="#ffdead">)</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>.split <font color="#ffa0a0">&quot;\\s+&quot;</font><font color="#ffdead">)))</font>&nbsp;<font color="#ffa0a0">&quot;&quot;</font><font color="#ffdead">))</font><br>
+<br>
+<font color="#87ceeb">;; selector syntax</font><br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;simplify-associative <font color="#ffdead">[[</font>op <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">next</font>&nbsp;forms<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">cons</font>&nbsp;op <font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq?</font>&nbsp;%<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;op <font color="#ffdead">(</font><font color="#98fb98">first</font>&nbsp;%<font color="#ffdead">)))</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">rest</font>&nbsp;%<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">list</font>&nbsp;%<font color="#ffdead">))</font>&nbsp;forms<font color="#ffdead">))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">first</font>&nbsp;forms<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-union <font color="#ffdead">[</font>forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>simplify-associative <font color="#ffdead">(</font><font color="#98fb98">cons</font>&nbsp;<font color="#ffdead">`</font>sm/union forms<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-intersection <font color="#ffdead">[</font>forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>simplify-associative <font color="#ffdead">(</font><font color="#98fb98">cons</font>&nbsp;<font color="#ffdead">`</font>sm/intersection forms<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;emit-chain <font color="#ffdead">[</font>forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>simplify-associative <font color="#ffdead">(</font><font color="#98fb98">cons</font>&nbsp;<font color="#ffdead">`</font>sm/chain forms<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmulti</font>&nbsp;compile-step <font color="#98fb98">type</font><font color="#ffdead">)</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;compile-step clojure.lang.Keyword <font color="#ffdead">[</font>kw<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[[[</font>first-letter <font color="#f0e68c"><b>:as</b></font>&nbsp;tag-name<font color="#ffdead">]</font>&nbsp;<font color="#f0e68c"><b>:as</b></font>&nbsp;segments<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>.split <font color="#ffdead">(</font><font color="#98fb98">name</font>&nbsp;kw<font color="#ffdead">)</font>&nbsp;<font color="#ffa0a0">&quot;(?=[#.])&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tag-pred <font color="#ffdead">(</font><font color="#f0e68c"><b>when-not</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">contains?</font>&nbsp;<font color="#ffdead">#{</font><font color="#ffa0a0">nil</font>&nbsp;<font color="#ffa0a0">\*</font>&nbsp;<font color="#ffa0a0">\#</font>&nbsp;<font color="#ffa0a0">\.</font><font color="#ffdead">}</font>&nbsp;first-letter<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">`</font><font color="#ffdead">(</font>tag= <font color="#ffdead">~</font><font color="#ffdead">(</font><font color="#98fb98">keyword</font>&nbsp;tag-name<font color="#ffdead">))])</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ids-pred <font color="#ffdead">(</font><font color="#f0e68c"><b>for</b></font>&nbsp;<font color="#ffdead">[</font>s segments <font color="#f0e68c"><b>:when</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffa0a0">\#</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">first</font>&nbsp;s<font color="#ffdead">))]</font>&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>id= <font color="#ffdead">~</font><font color="#ffdead">(</font><font color="#98fb98">subs</font>&nbsp;s <font color="#ffa0a0">1</font><font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;classes <font color="#ffdead">(</font><font color="#98fb98">set</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>for</b></font>&nbsp;<font color="#ffdead">[</font>s segments <font color="#f0e68c"><b>:when</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffa0a0">\.</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">first</font>&nbsp;s<font color="#ffdead">))]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">subs</font>&nbsp;s <font color="#ffa0a0">1</font><font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;class-pred <font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;classes<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">`</font><font color="#ffdead">(</font>has-class <font color="#ffdead">~@</font>classes<font color="#ffdead">)])</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;all-preds <font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;tag-pred ids-pred class-pred<font color="#ffdead">)]</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>emit-intersection <font color="#ffdead">(</font><font color="#cd5c5c">or</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;all-preds<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">`</font>any<font color="#ffdead">]))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;compile-step clojure.lang.IPersistentSet <font color="#ffdead">[</font>s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>emit-union <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;compile-step s<font color="#ffdead">)))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;compile-step clojure.lang.IPersistentVector <font color="#ffdead">[</font>s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>emit-intersection <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;compile-step s<font color="#ffdead">)))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmethod</font>&nbsp;compile-step <font color="#f0e68c"><b>:default</b></font>&nbsp;<font color="#ffdead">[</font>s<font color="#ffdead">]</font>&nbsp;s<font color="#ffdead">)</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;compile-chain <font color="#ffdead">[</font>s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[[</font>child-ops <font color="#ffdead">[</font>step <font color="#ffdead">&amp;</font>&nbsp;next-steps <font color="#f0e68c"><b>:as</b></font>&nbsp;steps<font color="#ffdead">]]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">split-with</font>&nbsp;<font color="#ffdead">#{</font><font color="#f0e68c"><b>:&gt;</b></font><font color="#ffdead">}</font>&nbsp;s<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;next-chain <font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;steps<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;next-steps<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>emit-chain <font color="#ffdead">[(</font>compile-step step<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>compile-chain next-steps<font color="#ffdead">)])</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>compile-step step<font color="#ffdead">)))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;child-ops<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;next-chain&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>emit-chain <font color="#ffdead">[</font><font color="#ffdead">`</font>sm/descendants-or-self next-chain<font color="#ffdead">]))))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;compile-selector <font color="#ffdead">[</font>s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>cond</b></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">set?</font>&nbsp;s<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>emit-union <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;compile-selector s<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">vector?</font>&nbsp;s<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>compile-chain s<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#f0e68c"><b>:else</b></font>&nbsp;s<font color="#ffdead">))</font><br>
+<br>
+<font color="#87ceeb">;; core </font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;children-locs <font color="#ffdead">[</font>loc<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;<font color="#ffdead">(</font>z/branch? loc<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">take-while</font>&nbsp;<font color="#98fb98">identity</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">iterate</font>&nbsp;z/right <font color="#ffdead">(</font>z/down loc<font color="#ffdead">)))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;transform-loc <font color="#ffdead">[</font>loc previous-state transformation<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>state <font color="#ffdead">(</font>sm/step previous-state loc<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;children <font color="#ffdead">(</font>flatmap <font color="#ffdead">#(</font>transform-loc <font color="#ffdead">%</font>&nbsp;state transformation<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>children-locs loc<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;node <font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;<font color="#ffdead">(</font>z/branch? loc<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">not=</font>&nbsp;children <font color="#ffdead">(</font>z/children loc<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>z/make-node loc <font color="#ffdead">(</font>z/node loc<font color="#ffdead">)</font>&nbsp;children<font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>z/node loc<font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font>sm/accept? state<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>transformation node<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;node<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;transform <font color="#ffdead">[</font>nodes <font color="#ffdead">[</font>state transformation<font color="#ffdead">]]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;<font color="#98fb98">identity</font>&nbsp;transformation<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;nodes<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>transformation <font color="#ffdead">(</font><font color="#cd5c5c">or</font>&nbsp;transformation <font color="#ffdead">(</font><font color="#98fb98">constantly</font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>flatmap <font color="#ffdead">#(</font>transform-loc <font color="#ffdead">(</font>xml/xml-zip %<font color="#ffdead">)</font>&nbsp;state transformation<font color="#ffdead">)</font>&nbsp;nodes<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;at* <font color="#ffdead">[</font>nodes <font color="#ffdead">&amp;</font>&nbsp;rules<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>reduce</b></font>&nbsp;transform nodes <font color="#ffdead">(</font><font color="#98fb98">partition</font>&nbsp;<font color="#ffa0a0">2</font>&nbsp;rules<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;selector<br>
+&nbsp;<font color="#ffa0a0">&quot;Turns the selector into clojure code.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>selector<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>compile-selector selector<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;selector-step<br>
+&nbsp;<font color="#ffa0a0">&quot;Turns the selector step into clojure code.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>compile-step selector-step<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;at <font color="#ffdead">[</font>node <font color="#ffdead">&amp;</font>&nbsp;rules<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">~</font>node<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">~@</font><font color="#ffdead">(</font><font color="#f0e68c"><b>for</b></font>&nbsp;<font color="#ffdead">[[</font>s t<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">partition</font>&nbsp;<font color="#ffa0a0">2</font>&nbsp;rules<font color="#ffdead">)]</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">`</font><font color="#ffdead">(</font>transform <font color="#ffdead">[(</font>selector <font color="#ffdead">~</font>s<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">~</font>t<font color="#ffdead">]))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;zip-select* <font color="#ffdead">[</font>locs state<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>select1 <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;select1 <font color="#ffdead">[</font>loc previous-state<font color="#ffdead">]</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>state <font color="#ffdead">(</font>sm/step previous-state loc<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;<font color="#ffdead">(</font>sm/accept? state<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">list</font>&nbsp;loc<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;<font color="#ffdead">#(</font>select1 <font color="#ffdead">%</font>&nbsp;state<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>children-locs loc<font color="#ffdead">)))))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>mapcat</b></font>&nbsp;<font color="#ffdead">#(</font>select1 <font color="#ffdead">%</font>&nbsp;state<font color="#ffdead">)</font>&nbsp;locs<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;select* <font color="#ffdead">[</font>nodes state<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;z/node <font color="#ffdead">(</font>zip-select* <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;xml/xml-zip nodes<font color="#ffdead">)</font>&nbsp;state<font color="#ffdead">)))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;select<br>
+&nbsp;<font color="#ffa0a0">&quot;Returns the seq of nodes and sub-nodes matched by the specified selector.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>nodes selector<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>select* <font color="#ffdead">~</font>nodes <font color="#ffdead">(</font>selector <font color="#ffdead">~</font>selector<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;zip-select<br>
+&nbsp;<font color="#ffa0a0">&quot;Returns the seq of locs matched by the specified selector.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>locs selector<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>zip-select* <font color="#ffdead">~</font>locs <font color="#ffdead">(</font>selector <font color="#ffdead">~</font>selector<font color="#ffdead">)))</font><br>
+<br>
+<font color="#87ceeb">;; main macros</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;transformation<br>
+&nbsp;<font color="#ffdead">([]</font>&nbsp;<font color="#ffdead">`</font><font color="#98fb98">identity</font><font color="#ffdead">)</font><br>
+&nbsp;<font color="#ffdead">([</font>form<font color="#ffdead">]</font>&nbsp;form<font color="#ffdead">)</font><br>
+&nbsp;<font color="#ffdead">([</font>form <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>node#<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>at node# <font color="#ffdead">~</font>form <font color="#ffdead">~@</font>forms<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;snippet* <font color="#ffdead">[</font>nodes args <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>nodes# <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;annotate <font color="#ffdead">~</font>nodes<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">~</font>args<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>flatmap <font color="#ffdead">(</font>transformation <font color="#ffdead">~@</font>forms<font color="#ffdead">)</font>&nbsp;nodes#<font color="#ffdead">))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;snippet <br>
+&nbsp;<font color="#ffa0a0">&quot;A snippet is a function that returns a seq of nodes.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>source selector args <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>snippet* <font color="#ffdead">(</font>select <font color="#ffdead">(</font>html-resource <font color="#ffdead">~</font>source<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">~</font>selector<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">~</font>args <font color="#ffdead">~@</font>forms<font color="#ffdead">))</font>&nbsp;&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;template <br>
+&nbsp;<font color="#ffa0a0">&quot;A template returns a seq of string.&quot;</font><br>
+&nbsp;<font color="#ffdead">([</font>source args <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp; <font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#98fb98">comp</font>&nbsp;emit* <font color="#ffdead">(</font>snippet* <font color="#ffdead">(</font>html-resource <font color="#ffdead">~</font>source<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">~</font>args <font color="#ffdead">~@</font>forms<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;defsnippet<br>
+&nbsp;<font color="#ffa0a0">&quot;Define a named snippet -- equivalent to (def name (snippet source selector args ...)).&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#98fb98">name</font>&nbsp;source selector args <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">~</font><font color="#98fb98">name</font>&nbsp;<font color="#ffdead">(</font>snippet <font color="#ffdead">~</font>source <font color="#ffdead">~</font>selector <font color="#ffdead">~</font>args <font color="#ffdead">~@</font>forms<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp; <br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;deftemplate<br>
+&nbsp;<font color="#ffa0a0">&quot;Defines a template as a function that returns a seq of strings.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font><font color="#98fb98">name</font>&nbsp;source args <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font>&nbsp;<br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">~</font><font color="#98fb98">name</font>&nbsp;<font color="#ffdead">(</font>template <font color="#ffdead">~</font>source <font color="#ffdead">~</font>args <font color="#ffdead">~@</font>forms<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;defsnippets<br>
+&nbsp;<font color="#ffdead">[</font>source <font color="#ffdead">&amp;</font>&nbsp;specs<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>xml# <font color="#ffdead">(</font>html-resource <font color="#ffdead">~</font>source<font color="#ffdead">)]</font>&nbsp;<br>
+&nbsp;&nbsp; <font color="#ffdead">~@</font><font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[[</font><font color="#98fb98">name</font>&nbsp;selector args <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">~</font><font color="#98fb98">name</font>&nbsp;<font color="#ffdead">(</font>snippet xml# <font color="#ffdead">~</font>selector <font color="#ffdead">~</font>args <font color="#ffdead">~@</font>forms<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; specs<font color="#ffdead">)))</font><br>
+<br>
+<font color="#87ceeb">;; transformations</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;content<br>
+&nbsp;<font color="#ffa0a0">&quot;Replaces the content of the node. Values can be nodes or nested collection of nodes.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">(</font>flatten values<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;html-snippet <font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffa0a0">&quot;Concatenate values as a string and then parse it with tagsoup.</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;html-snippet doesn't insert missing &lt;html&gt; or &lt;body&gt; tags.&quot;</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffa0a0">&quot;&lt;bogon&gt;&quot;</font>&nbsp;values<font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;java.io.StringReader. html-resource <font color="#98fb98">first</font>&nbsp;<font color="#f0e68c"><b>:content</b></font><font color="#ffdead">))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;html-content<br>
+&nbsp;<font color="#ffa0a0">&quot;Replaces the content of the node. Values are strings containing html code.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;html-snippet values<font color="#ffdead">)))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;wrap <br>
+&nbsp;<font color="#ffdead">([</font>tag<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>wrap tag <font color="#ffa0a0">nil</font><font color="#ffdead">))</font><br>
+&nbsp;<font color="#ffdead">([</font>tag attrs<font color="#ffdead">]</font><br>
+&nbsp;&nbsp; <font color="#ffdead">#(</font><font color="#98fb98">array-map</font>&nbsp;<font color="#f0e68c"><b>:tag</b></font>&nbsp;tag <font color="#f0e68c"><b>:attrs</b></font>&nbsp;attrs <font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">[</font>%<font color="#ffdead">])))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;unwrap <font color="#f0e68c"><b>:content</b></font><font color="#ffdead">)</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;set-attr<br>
+&nbsp;<font color="#ffa0a0">&quot;Assocs attributes on the selected node.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;kvs<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;% <font color="#ffdead">{})</font>&nbsp;kvs<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;remove-attr <br>
+&nbsp;<font color="#ffa0a0">&quot;Dissocs attributes on the selected node.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;attr-names<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">dissoc</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;%<font color="#ffdead">)</font>&nbsp;attr-names<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;add-class<br>
+&nbsp;<font color="#ffa0a0">&quot;Adds the specified classes to the selected node.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;classes<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>classes <font color="#ffdead">(</font><font color="#98fb98">into</font>&nbsp;<font color="#ffdead">(</font>attr-values % <font color="#f0e68c"><b>:class</b></font><font color="#ffdead">)</font>&nbsp;classes<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">assoc-in</font>&nbsp;% <font color="#ffdead">[</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#f0e68c"><b>:class</b></font><font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">interpose</font>&nbsp;<font color="#ffa0a0">\space</font>&nbsp;classes<font color="#ffdead">)))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;remove-class <br>
+&nbsp;<font color="#ffa0a0">&quot;Removes the specified classes from the selected node.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;classes<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>classes <font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">disj</font>&nbsp;<font color="#ffdead">(</font>attr-values % <font color="#f0e68c"><b>:class</b></font><font color="#ffdead">)</font>&nbsp;classes<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; attrs <font color="#ffdead">(</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;%<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; attrs <font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">empty?</font>&nbsp;classes<font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">dissoc</font>&nbsp;attrs <font color="#f0e68c"><b>:class</b></font><font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">assoc</font>&nbsp;attrs <font color="#f0e68c"><b>:class</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">interpose</font>&nbsp;<font color="#ffa0a0">\space</font>&nbsp;classes<font color="#ffdead">))))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">assoc</font>&nbsp;% <font color="#f0e68c"><b>:attrs</b></font>&nbsp;attrs<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;do-&gt;<br>
+&nbsp;<font color="#ffa0a0">&quot;Chains (composes) several transformations. Applies functions from left to right.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;fns<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#f0e68c"><b>reduce</b></font>&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>nodes f<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>flatmap f nodes<font color="#ffdead">))</font>&nbsp;<font color="#ffdead">[</font>%<font color="#ffdead">]</font>&nbsp;fns<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;clone-for<br>
+&nbsp;<font color="#ffdead">[</font>comprehension <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>node#<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#f0e68c"><b>for</b></font>&nbsp;<font color="#ffdead">~</font>comprehension <font color="#ffdead">((</font>transformation <font color="#ffdead">~@</font>forms<font color="#ffdead">)</font>&nbsp;node#<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;append<br>
+&nbsp;<font color="#ffa0a0">&quot;Appends the values to the actual content.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:content</b></font>&nbsp;%<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>flatten values<font color="#ffdead">))))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;prepend<br>
+&nbsp;<font color="#ffa0a0">&quot;Prepends the values to the actual content.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">concat</font>&nbsp;<font color="#ffdead">(</font>flatten values<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:content</b></font>&nbsp;%<font color="#ffdead">))))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;after<br>
+&nbsp;<font color="#ffa0a0">&quot;Inserts the values after the current element.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">cons</font>&nbsp;<font color="#ffdead">%</font>&nbsp;<font color="#ffdead">(</font>flatten values<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;before<br>
+&nbsp;<font color="#ffa0a0">&quot;Inserts the values before the current element.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">concat</font>&nbsp;<font color="#ffdead">(</font>flatten values<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">[</font>%<font color="#ffdead">]))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;substitute<br>
+&nbsp;<font color="#ffa0a0">&quot;Replaces the current element.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">(</font><font color="#98fb98">constantly</font>&nbsp;<font color="#ffdead">(</font>flatten values<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;move<br>
+&nbsp;<font color="#ffa0a0">&quot;Takes all nodes (under the current element) matched by src-selector, removes</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;them and combines them with the elements matched by dest-selector.</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;By default, destination elements are replaced.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">([</font>src-selector dest-selector<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>move <font color="#ffdead">~</font>src-selector <font color="#ffdead">~</font>dest-selector substitute<font color="#ffdead">))</font><br>
+&nbsp;<font color="#ffdead">([</font>src-selector dest-selector combiner<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>node#<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>nodes# <font color="#ffdead">(</font>select <font color="#ffdead">[</font>node#<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">~</font>src-selector<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>at node#<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">~</font>src-selector <font color="#ffa0a0">nil</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">~</font>dest-selector <font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#ffdead">~</font>combiner nodes#<font color="#ffdead">))))))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;strict-mode* <font color="#ffdead">[</font>node<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font>xml/tag? node<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;node<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">assoc-in</font>&nbsp;<font color="#ffdead">[</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#f0e68c"><b>:xmlns</b></font><font color="#ffdead">]</font>&nbsp;<font color="#ffa0a0">&quot;<a href="http://www.w3.org/1999/xhtml">http://www.w3.org/1999/xhtml</a>&quot;</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">vary-meta</font>&nbsp;<font color="#98fb98">assoc</font>&nbsp;<font color="#f0e68c"><b>::xml/dtd</b></font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">[</font><font color="#ffa0a0">&quot;html&quot;</font>&nbsp;<font color="#ffa0a0">&quot;-//W3C//DTD XHTML 1.0 Transitional//EN&quot;</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffa0a0">&quot;<a href="http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd</a>&quot;</font><font color="#ffdead">]))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;node<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;strict-mode<br>
+&nbsp;<font color="#ffa0a0">&quot;Adds xhtml-transitional DTD to switch browser in 'strict' mode.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>do-&gt; <font color="#ffdead">(</font>transformation <font color="#ffdead">~@</font>forms<font color="#ffdead">)</font>&nbsp;strict-mode*<font color="#ffdead">))</font>&nbsp;<br>
+<br>
+<font color="#87ceeb">;; predicates utils</font><br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;zip-pred <br>
+&nbsp;<font color="#ffa0a0">&quot;Turns a predicate function on elements locs into a predicate-step usable in selectors.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>f<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>sm/pred <font color="#ffdead">#(</font><font color="#cd5c5c">and</font>&nbsp;<font color="#ffdead">(</font>z/branch? %<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>f %<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;pred <br>
+&nbsp;<font color="#ffa0a0">&quot;Turns a predicate function on elements into a predicate-step usable in selectors.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>f<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>zip-pred <font color="#ffdead">#(</font>f <font color="#ffdead">(</font>z/node %<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;text-pred <br>
+&nbsp;<font color="#ffa0a0">&quot;Turns a predicate function on strings (text nodes) into a predicate-step usable in selectors.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>f<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>sm/pred <font color="#ffdead">#(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>n <font color="#ffdead">(</font>z/node %<font color="#ffdead">)]</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">string?</font>&nbsp;n<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>f n<font color="#ffdead">)))))</font><br>
+<br>
+<font color="#87ceeb">;; predicates</font><br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;any <font color="#ffdead">(</font>pred <font color="#ffdead">(</font><font color="#98fb98">constantly</font>&nbsp;<font color="#ffa0a0">true</font><font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;tag= <br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, :foo is as short-hand for (tag= :foo).&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>tag-name<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>pred <font color="#ffdead">#(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:tag</b></font>&nbsp;%<font color="#ffdead">)</font>&nbsp;tag-name<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;id=<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, :#foo is as short-hand for (id= \&quot;foo\&quot;).&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>id<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>pred <font color="#ffdead">#(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;% <font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#f0e68c"><b>:id</b></font><font color="#ffdead">)</font>&nbsp;id<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;attr? <br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified attributes are present.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;kws<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>pred <font color="#ffdead">#(</font><font color="#98fb98">every?</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;% <font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#98fb98">keys</font>&nbsp;<font color="#98fb98">set</font><font color="#ffdead">)</font>&nbsp;kws<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;every?+ <font color="#ffdead">[</font>pred <font color="#ffdead">&amp;</font>&nbsp;colls<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">every?</font>&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">apply</font>&nbsp;pred <font color="#ffdead">%</font><font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#f0e68c"><b>map</b></font>&nbsp;<font color="#98fb98">vector</font>&nbsp;colls<font color="#ffdead">)))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;multi-attr-pred <br>
+&nbsp;<font color="#ffdead">[</font>single-attr-pred<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;kvs<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>ks <font color="#ffdead">(</font><font color="#98fb98">take-nth</font>&nbsp;<font color="#ffa0a0">2</font>&nbsp;kvs<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;vs <font color="#ffdead">(</font><font color="#98fb98">take-nth</font>&nbsp;<font color="#ffa0a0">2</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">rest</font>&nbsp;kvs<font color="#ffdead">))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>pred <font color="#ffdead">#(</font><font color="#f0e68c"><b>when-let</b></font>&nbsp;<font color="#ffdead">[</font>attrs <font color="#ffdead">(</font><font color="#f0e68c"><b>:attrs</b></font>&nbsp;%<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>every?+ single-attr-pred <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;attrs ks<font color="#ffdead">)</font>&nbsp;vs<font color="#ffdead">))))))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">#^</font><font color="#ffdead">{</font><font color="#f0e68c"><b>:doc</b></font>&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified attributes have the specified values.&quot;</font><font color="#ffdead">}</font>&nbsp;<br>
+&nbsp;attr= <br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>multi-attr-pred <font color="#98fb98">=</font><font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;attr-has<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified whitespace-seperated attribute contains the specified values. See CSS ~=&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>attr <font color="#ffdead">&amp;</font>&nbsp;values<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>pred <font color="#ffdead">#(</font><font color="#98fb98">every?</font>&nbsp;<font color="#ffdead">(</font>attr-values % attr<font color="#ffdead">)</font>&nbsp;values<font color="#ffdead">)))</font><br>
+&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;has-class <br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, :.foo.bar is as short-hand for (has-class \&quot;foo\&quot; \&quot;bar\&quot;).&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font><font color="#ffdead">&amp;</font>&nbsp;classes<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;attr-has <font color="#f0e68c"><b>:class</b></font>&nbsp;classes<font color="#ffdead">))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;starts-with? <font color="#ffdead">[</font><font color="#ffdead">#^</font>String s <font color="#ffdead">#^</font>String prefix<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;s <font color="#ffdead">(</font>.startsWith s prefix<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;ends-with? <font color="#ffdead">[</font><font color="#ffdead">#^</font>String s <font color="#ffdead">#^</font>String suffix<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;s <font color="#ffdead">(</font>.endsWith s suffix<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;contains-substring? <font color="#ffdead">[</font><font color="#ffdead">#^</font>String s <font color="#ffdead">#^</font>String substring<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;s <font color="#ffdead">(</font><font color="#98fb98">&lt;=</font>&nbsp;<font color="#ffa0a0">0</font>&nbsp;<font color="#ffdead">(</font>.indexOf s substring<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">#^</font><font color="#ffdead">{</font><font color="#f0e68c"><b>:doc</b></font>&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified attributes start with the specified values. See CSS ^= .&quot;</font><font color="#ffdead">}</font>&nbsp;<br>
+&nbsp;attr-starts<br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>multi-attr-pred starts-with?<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">#^</font><font color="#ffdead">{</font><font color="#f0e68c"><b>:doc</b></font>&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified attributes end with the specified values. See CSS $= .&quot;</font><font color="#ffdead">}</font>&nbsp;<br>
+&nbsp;attr-ends<br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>multi-attr-pred ends-with?<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">#^</font><font color="#ffdead">{</font><font color="#f0e68c"><b>:doc</b></font>&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified attributes contain the specified values. See CSS *= .&quot;</font><font color="#ffdead">}</font>&nbsp;<br>
+&nbsp;attr-contains<br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>multi-attr-pred contains-substring?<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;is-first-segment? <font color="#ffdead">[</font><font color="#ffdead">#^</font>String s <font color="#ffdead">#^</font>String segment<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;s <br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.startsWith s segment<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffa0a0">\-</font>&nbsp;<font color="#ffdead">(</font>.charAt s <font color="#ffdead">(</font><font color="#98fb98">count</font>&nbsp;segment<font color="#ffdead">)))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;<font color="#ffdead">#^</font><font color="#ffdead">{</font><font color="#f0e68c"><b>:doc</b></font>&nbsp;<font color="#ffa0a0">&quot;Selector predicate, tests if the specified attributes start with the specified values. See CSS |= .&quot;</font><font color="#ffdead">}</font><br>
+&nbsp;attr|<font color="#98fb98">=</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>multi-attr-pred is-first-segment?<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;root <br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>zip-pred <font color="#ffdead">#(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">%</font>&nbsp;z/up <font color="#98fb98">nil?</font><font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;nth? <br>
+&nbsp;<font color="#ffdead">[</font>f a b<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">zero?</font>&nbsp;a<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;xml/tag? <font color="#ffdead">(</font>f %<font color="#ffdead">))</font>&nbsp;<font color="#98fb98">count</font>&nbsp;<font color="#98fb98">inc</font><font color="#ffdead">)</font>&nbsp;b<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>an+b <font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;xml/tag? <font color="#ffdead">(</font>f %<font color="#ffdead">))</font>&nbsp;<font color="#98fb98">count</font>&nbsp;<font color="#98fb98">inc</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; an <font color="#ffdead">(</font><font color="#98fb98">-</font>&nbsp;an+b b<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">zero?</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">rem</font>&nbsp;an a<font color="#ffdead">))</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">&lt;=</font>&nbsp;<font color="#ffa0a0">0</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">quot</font>&nbsp;an a<font color="#ffdead">))))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;nth-child<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector step, tests if the node has an+b-1 siblings on its left. See CSS :nth-child.&quot;</font><br>
+&nbsp;<font color="#ffdead">([</font>b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>nth-child <font color="#ffa0a0">0</font>&nbsp;b<font color="#ffdead">))</font><br>
+&nbsp;<font color="#ffdead">([</font>a b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>zip-pred <font color="#ffdead">(</font>nth? z/lefts a b<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;nth-last-child<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector step, tests if the node has an+b-1 siblings on its right. See CSS :nth-last-child.&quot;</font><br>
+&nbsp;<font color="#ffdead">([</font>b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>nth-last-child <font color="#ffa0a0">0</font>&nbsp;b<font color="#ffdead">))</font><br>
+&nbsp;<font color="#ffdead">([</font>a b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>zip-pred <font color="#ffdead">(</font>nth? z/rights a b<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;filter-of-type <font color="#ffdead">[</font>f<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>loc<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>tag <font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;loc z/node <font color="#f0e68c"><b>:tag</b></font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pred <font color="#ffdead">#(</font><font color="#98fb98">=</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:tag</b></font>&nbsp;%<font color="#ffdead">)</font>&nbsp;tag<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;pred <font color="#ffdead">(</font>f loc<font color="#ffdead">)))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;nth-of-type<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector step, tests if the node has an+b-1 siblings of the same type (tag name) on its left. See CSS :nth-of-type.&quot;</font><br>
+&nbsp;<font color="#ffdead">([</font>b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>nth-of-type <font color="#ffa0a0">0</font>&nbsp;b<font color="#ffdead">))</font><br>
+&nbsp;<font color="#ffdead">([</font>a b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>zip-pred <font color="#ffdead">(</font>nth? <font color="#ffdead">(</font>filter-of-type z/lefts<font color="#ffdead">)</font>&nbsp;a b<font color="#ffdead">))))</font><br>
+&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;nth-last-of-type<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector step, tests if the node has an+b-1 siblings of the same type (tag name) on its right. See CSS :nth-last-of-type.&quot;</font><br>
+&nbsp;<font color="#ffdead">([</font>b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>nth-last-of-type <font color="#ffa0a0">0</font>&nbsp;b<font color="#ffdead">))</font><br>
+&nbsp;<font color="#ffdead">([</font>a b<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font>zip-pred <font color="#ffdead">(</font>nth? <font color="#ffdead">(</font>filter-of-type z/rights<font color="#ffdead">)</font>&nbsp;a b<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;first-child <font color="#ffdead">(</font>nth-child <font color="#ffa0a0">1</font><font color="#ffdead">))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;last-child <font color="#ffdead">(</font>nth-last-child <font color="#ffa0a0">1</font><font color="#ffdead">))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;first-of-type <font color="#ffdead">(</font>nth-of-type <font color="#ffa0a0">1</font><font color="#ffdead">))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;last-of-type <font color="#ffdead">(</font>nth-last-of-type <font color="#ffa0a0">1</font><font color="#ffdead">))</font>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;only-child <font color="#ffdead">(</font>sm/intersection first-child last-child<font color="#ffdead">))</font>&nbsp;&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;only-of-type <font color="#ffdead">(</font>sm/intersection first-of-type last-of-type<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;void <font color="#ffdead">(</font>pred <font color="#ffdead">#(</font><font color="#98fb98">empty?</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">remove</font>&nbsp;<font color="#98fb98">empty?</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:content</b></font>&nbsp;%<font color="#ffdead">)))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;odd <font color="#ffdead">(</font>nth-child <font color="#ffa0a0">2</font>&nbsp;<font color="#ffa0a0">1</font><font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;even <font color="#ffdead">(</font>nth-child <font color="#ffa0a0">2</font>&nbsp;<font color="#ffa0a0">0</font><font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;select? <font color="#ffdead">[</font>nodes state<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">boolean</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">seq</font>&nbsp;<font color="#ffdead">(</font>select* nodes state<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;has* <font color="#ffdead">[</font>state<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>pred <font color="#ffdead">#(</font>select? <font color="#ffdead">[</font>%<font color="#ffdead">]</font>&nbsp;state<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;has<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, matches elements which contain at least one element that matches the specified selector. See jQuery's :has&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>selector<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>has* <font color="#ffdead">(</font>sm/chain any <font color="#ffdead">(</font>selector <font color="#ffdead">~</font>selector<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;but-node<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, matches nodes which are rejected by the specified selector-step. See CSS :not&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>sm/complement1 <font color="#ffdead">(</font>selector-step <font color="#ffdead">~</font>selector-step<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;but<br>
+&nbsp;<font color="#ffa0a0">&quot;Selector predicate, matches elements which are rejected by the specified selector-step. See CSS :not&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>sm/intersection any <font color="#ffdead">(</font>but-node <font color="#ffdead">~</font>selector-step<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;left* <font color="#ffdead">[</font>state<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">(</font>sm/pred <br>
+&nbsp;&nbsp; <font color="#ffdead">#(</font><font color="#f0e68c"><b>when-let</b></font>&nbsp;<font color="#ffdead">[</font>sibling <font color="#ffdead">(</font><font color="#98fb98">first</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;xml/tag? <font color="#ffdead">(</font><font color="#98fb98">reverse</font>&nbsp;<font color="#ffdead">(</font>z/lefts %<font color="#ffdead">))))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>select? <font color="#ffdead">[</font>sibling<font color="#ffdead">]</font>&nbsp;state<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;left <br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>left* <font color="#ffdead">(</font>selector-step <font color="#ffdead">~</font>selector-step<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;lefts* <font color="#ffdead">[</font>state<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">(</font>sm/pred <br>
+&nbsp;&nbsp; <font color="#ffdead">#(</font>select? <font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;xml/tag? <font color="#ffdead">(</font>z/lefts %<font color="#ffdead">))</font>&nbsp;state<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;lefts<br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>lefts* <font color="#ffdead">(</font>selector-step <font color="#ffdead">~</font>selector-step<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;right* <font color="#ffdead">[</font>state<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">(</font>sm/pred <br>
+&nbsp;&nbsp; <font color="#ffdead">#(</font><font color="#f0e68c"><b>when-let</b></font>&nbsp;<font color="#ffdead">[</font>sibling <font color="#ffdead">(</font><font color="#98fb98">first</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;xml/tag? <font color="#ffdead">(</font>z/rights %<font color="#ffdead">)))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>select? <font color="#ffdead">[</font>sibling<font color="#ffdead">]</font>&nbsp;state<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;right <br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>right* <font color="#ffdead">(</font>selector-step <font color="#ffdead">~</font>selector-step<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;rights* <font color="#ffdead">[</font>state<font color="#ffdead">]</font><br>
+&nbsp;<font color="#ffdead">(</font>sm/pred <br>
+&nbsp;&nbsp; <font color="#ffdead">#(</font>select? <font color="#ffdead">(</font><font color="#f0e68c"><b>filter</b></font>&nbsp;xml/tag? <font color="#ffdead">(</font>z/rights %<font color="#ffdead">))</font>&nbsp;state<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;rights <br>
+&nbsp;<font color="#ffdead">[</font>selector-step<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>rights* <font color="#ffdead">(</font>selector-step <font color="#ffdead">~</font>selector-step<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;any-node <font color="#ffdead">(</font>sm/pred <font color="#ffdead">(</font><font color="#98fb98">constantly</font>&nbsp;<font color="#ffa0a0">true</font><font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;text-node <font color="#ffdead">(</font>sm/pred <font color="#ffdead">#(</font><font color="#98fb98">string?</font>&nbsp;<font color="#ffdead">(</font>z/node %<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;comment-node <font color="#ffdead">(</font>sm/pred <font color="#ffdead">#(</font>xml/comment? <font color="#ffdead">(</font>z/node %<font color="#ffdead">))))</font><br>
+<br>
+<font color="#87ceeb">;; screen-scraping utils</font><br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;text<br>
+&nbsp;<font color="#ffa0a0">&quot;Returns the text value of a node.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">{</font><font color="#f0e68c"><b>:tag</b></font>&nbsp;String<font color="#ffdead">}</font><br>
+&nbsp;<font color="#ffdead">[</font>node<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>cond</b></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">string?</font>&nbsp;node<font color="#ffdead">)</font>&nbsp;node<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>xml/tag? node<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;text <font color="#ffdead">(</font><font color="#f0e68c"><b>:content</b></font>&nbsp;node<font color="#ffdead">)))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#f0e68c"><b>:else</b></font>&nbsp;<font color="#ffa0a0">&quot;&quot;</font><font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;texts<br>
+&nbsp;<font color="#ffa0a0">&quot;Returns the text value of a nodes collection.&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">{</font><font color="#f0e68c"><b>:tag</b></font>&nbsp;String<font color="#ffdead">}</font><br>
+&nbsp;<font color="#ffdead">[</font>nodes<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;text nodes<font color="#ffdead">))</font><br>
+&nbsp;<br>
+&nbsp;<font color="#87ceeb">;; repl-utils</font><br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;sniptest* <font color="#ffdead">[</font>nodes f<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">str</font>&nbsp;<font color="#ffdead">(</font>emit* <font color="#ffdead">(</font>flatmap f nodes<font color="#ffdead">))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defmacro</font>&nbsp;sniptest<br>
+&nbsp;<font color="#ffa0a0">&quot;A handy macro for experimenting at the repl&quot;</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>source-string <font color="#ffdead">&amp;</font>&nbsp;forms<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">`</font><font color="#ffdead">(</font>sniptest* <font color="#ffdead">(</font>html-snippet <font color="#ffdead">~</font>source-string<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>transformation <font color="#ffdead">~@</font>forms<font color="#ffdead">)))</font>&nbsp;<br>
+</font></body>
+</html>

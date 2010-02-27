@@ -1,0 +1,107 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>~/enlive/src/net/cgrand/xml.clj.html</title>
+<meta name="Generator" content="Vim/7.2">
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+</head>
+<body bgcolor="#333333" text="#ffffff"><font face="monospace">
+<font color="#87ceeb">;&nbsp;&nbsp; Copyright (c) Christophe Grand. All rights reserved.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; The use and distribution terms for this software are covered by the</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; Eclipse Public License 1.0 (<a href="http://opensource.org/licenses/eclipse-1.0.php)">http://opensource.org/licenses/eclipse-1.0.php)</a></font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; which can be found in the file epl-v10.html at the root of this distribution.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; By using this software in any fashion, you are agreeing to be bound by</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; the terms of this license.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; You must not remove this notice, or any other, from this software.</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">ns</font>&nbsp;net.cgrand.xml<br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:require</b></font>&nbsp;<font color="#ffdead">[</font>clojure.zip <font color="#f0e68c"><b>:as</b></font>&nbsp;z<font color="#ffdead">])</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:import</b></font>&nbsp;<font color="#ffdead">(</font>org.xml.sax ContentHandler Attributes SAXException XMLReader<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>org.xml.sax.ext DefaultHandler2<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>javax.xml.parsers SAXParser SAXParserFactory<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defstruct</font>&nbsp;element <font color="#f0e68c"><b>:tag</b></font>&nbsp;<font color="#f0e68c"><b>:attrs</b></font>&nbsp;<font color="#f0e68c"><b>:content</b></font><font color="#ffdead">)</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;tag <font color="#ffdead">(</font><font color="#98fb98">accessor</font>&nbsp;element <font color="#f0e68c"><b>:tag</b></font><font color="#ffdead">))</font><br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;attrs <font color="#ffdead">(</font><font color="#98fb98">accessor</font>&nbsp;element <font color="#f0e68c"><b>:attrs</b></font><font color="#ffdead">))</font><br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;content <font color="#ffdead">(</font><font color="#98fb98">accessor</font>&nbsp;element <font color="#f0e68c"><b>:content</b></font><font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;tag? <font color="#f0e68c"><b>:tag</b></font><font color="#ffdead">)</font><br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;document? <font color="#ffdead">[</font>x<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;<font color="#f0e68c"><b>:document</b></font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:type</b></font>&nbsp;x<font color="#ffdead">)))</font><br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;comment? <font color="#ffdead">[</font>x<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">=</font>&nbsp;<font color="#f0e68c"><b>:comment</b></font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:type</b></font>&nbsp;x<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;xml-zip <br>
+&nbsp;<font color="#ffa0a0">&quot;Returns a zipper for xml elements (as from xml/parse),</font><br>
+<font color="#ffa0a0">&nbsp;given a root element&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>root<font color="#ffdead">]</font><br>
+&nbsp;&nbsp; <font color="#ffdead">(</font>z/zipper <font color="#ffdead">#(</font><font color="#cd5c5c">or</font>&nbsp;<font color="#ffdead">(</font>tag? %<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>document? %<font color="#ffdead">))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%1</font>&nbsp;<font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">and</font>&nbsp;%<font color="#ffa0a0">2</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">vector</font>&nbsp;%<font color="#ffa0a0">2</font><font color="#ffdead">)))</font>&nbsp;root<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;insert-element <font color="#ffdead">[</font>loc e<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;loc <font color="#ffdead">(</font>z/append-child e<font color="#ffdead">)</font>&nbsp;z/down z/rightmost<font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;merge-text-left <font color="#ffdead">[</font>loc s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">or</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when-let</b></font>&nbsp;<font color="#ffdead">[</font>l <font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;loc z/down z/rightmost<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;l z/node <font color="#98fb98">string?</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;l <font color="#ffdead">(</font>z/edit <font color="#98fb98">str</font>&nbsp;s<font color="#ffdead">)</font>&nbsp;z/up<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;loc <font color="#ffdead">(</font>z/append-child s<font color="#ffdead">))))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn-</font>&nbsp;handler <font color="#ffdead">[</font>loc metadata<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">proxy</font>&nbsp;<font color="#ffdead">[</font>DefaultHandler2<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">[]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>startElement <font color="#ffdead">[</font>uri local-name q-name <font color="#ffdead">#^</font>Attributes atts<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>e <font color="#ffdead">(</font><font color="#98fb98">struct</font>&nbsp;element <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">keyword</font>&nbsp;q-name<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">pos?</font>&nbsp;<font color="#ffdead">(</font><font color="#ffdead">.</font>&nbsp;atts <font color="#ffdead">(</font>getLength<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>reduce</b></font>&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">%1</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">keyword</font>&nbsp;<font color="#ffdead">(</font>.getQName atts %<font color="#ffa0a0">2</font><font color="#ffdead">))</font>&nbsp;<font color="#ffdead">(</font>.getValue atts <font color="#ffdead">(</font><font color="#98fb98">int</font>&nbsp;%<font color="#ffa0a0">2</font><font color="#ffdead">)))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">{}</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">range</font>&nbsp;<font color="#ffdead">(</font>.getLength atts<font color="#ffdead">)))))]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">swap!</font>&nbsp;loc insert-element e<font color="#ffdead">)))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>endElement <font color="#ffdead">[</font>uri local-name q-name<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">swap!</font>&nbsp;loc z/up<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>characters <font color="#ffdead">[</font>ch start length<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">swap!</font>&nbsp;loc merge-text-left <font color="#ffdead">(</font>String. <font color="#ffdead">#^</font>chars ch <font color="#ffdead">(</font><font color="#98fb98">int</font>&nbsp;start<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">int</font>&nbsp;length<font color="#ffdead">))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>ignorableWhitespace <font color="#ffdead">[</font>ch start length<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">swap!</font>&nbsp;loc merge-text-left <font color="#ffdead">(</font>String. <font color="#ffdead">#^</font>chars ch <font color="#ffdead">(</font><font color="#98fb98">int</font>&nbsp;start<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">int</font>&nbsp;length<font color="#ffdead">))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#87ceeb">comment [ch start length]</font><br>
+<font color="#87ceeb">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(swap! loc z/append-child {:type :comment :data (String. #^chars ch (int start</font>)<font color="#87ceeb">&nbsp;(int length))})</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>startDTD <font color="#ffdead">[</font><font color="#98fb98">name</font>&nbsp;publicId systemId<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">swap!</font>&nbsp;metadata <font color="#98fb98">assoc</font>&nbsp;<font color="#f0e68c"><b>::dtd</b></font>&nbsp;<font color="#ffdead">[</font><font color="#98fb98">name</font>&nbsp;publicId systemId<font color="#ffdead">]))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>resolveEntity<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">([</font><font color="#98fb98">name</font>&nbsp;publicId baseURI systemId<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">doto</font>&nbsp;<font color="#ffdead">(</font>org.xml.sax.InputSource.<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setSystemId systemId<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setPublicId publicId<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>.setCharacterStream <font color="#ffdead">(</font>java.io.StringReader. <font color="#ffa0a0">&quot;&quot;</font><font color="#ffdead">))))</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">([</font>publicId systemId<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font><font color="#ffdead">#^</font>DefaultHandler2 <font color="#98fb98">this</font>&nbsp;<font color="#98fb98">this</font><font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#98fb98">proxy-super</font>&nbsp;resolveEntity publicId systemId<font color="#ffdead">))))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;startparse-sax <font color="#ffdead">[</font>s ch<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">(</font>SAXParserFactory/newInstance<font color="#ffdead">)</font><br>
+&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#cd5c5c">doto</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>.setValidating <font color="#ffa0a0">false</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>.setFeature <font color="#ffa0a0">&quot;<a href="http://xml.org/sax/features/external-general-entities">http://xml.org/sax/features/external-general-entities</a>&quot;</font>&nbsp;<font color="#ffa0a0">false</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>.setFeature <font color="#ffa0a0">&quot;<a href="http://xml.org/sax/features/external-parameter-entities">http://xml.org/sax/features/external-parameter-entities</a>&quot;</font>&nbsp;<font color="#ffa0a0">false</font><font color="#ffdead">))</font>&nbsp;<br>
+&nbsp;&nbsp; .newSAXParser<br>
+&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#cd5c5c">doto</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>.setProperty <font color="#ffa0a0">&quot;<a href="http://xml.org/sax/properties/lexical-handler">http://xml.org/sax/properties/lexical-handler</a>&quot;</font>&nbsp;ch<font color="#ffdead">))</font><br>
+&nbsp;&nbsp; <font color="#ffdead">(</font>.parse s ch<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;<font color="#98fb98">parse</font><br>
+&nbsp;&nbsp;<font color="#ffa0a0">&quot;Parses and loads the source s, which can be a File, InputStream or</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;String naming a URI. Returns a seq of tree of the xml/element struct-map,</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;which has the keys :tag, :attrs, and :content. and accessor fns tag,</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;attrs, and content. Other parsers can be supplied by passing</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;startparse, a fn taking a source and a ContentHandler and returning</font><br>
+<font color="#ffa0a0">&nbsp;&nbsp;a parser&quot;</font><br>
+&nbsp;&nbsp;<font color="#ffdead">([</font>s<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">parse</font>&nbsp;s startparse-sax<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;<font color="#ffdead">([</font>s startparse<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>loc <font color="#ffdead">(</font><font color="#98fb98">atom</font>&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;<font color="#ffdead">{</font><font color="#f0e68c"><b>:type</b></font>&nbsp;<font color="#f0e68c"><b>:document</b></font>&nbsp;<font color="#f0e68c"><b>:content</b></font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">}</font>&nbsp;xml-zip<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;metadata <font color="#ffdead">(</font><font color="#98fb98">atom</font>&nbsp;<font color="#ffdead">{})</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;content-handler <font color="#ffdead">(</font>handler loc metadata<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>startparse s content-handler<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">instance?</font>&nbsp;clojure.lang.IObj %<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">vary-meta</font>&nbsp;% <font color="#98fb98">merge</font>&nbsp;@metadata<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">%</font><font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">-&gt;</font>&nbsp;@loc z/root <font color="#f0e68c"><b>:content</b></font><font color="#ffdead">)))))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <br>
+</font></body>
+</html>
