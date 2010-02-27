@@ -1,0 +1,90 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<title>~/enlive/src/net/cgrand/enlive_html/state_machine.clj.html</title>
+<meta name="Generator" content="Vim/7.2">
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+</head>
+<body bgcolor="#333333" text="#ffffff"><font face="monospace">
+<font color="#87ceeb">;&nbsp;&nbsp; Copyright (c) Christophe Grand, 2009. All rights reserved.</font><br>
+<br>
+<font color="#87ceeb">;&nbsp;&nbsp; The use and distribution terms for this software are covered by the</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; Eclipse Public License 1.0 (<a href="http://opensource.org/licenses/eclipse-1.0.php)">http://opensource.org/licenses/eclipse-1.0.php)</a></font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; which can be found in the file epl-v10.html at the root of this </font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; distribution.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; By using this software in any fashion, you are agreeing to be bound by</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; the terms of this license.</font><br>
+<font color="#87ceeb">;&nbsp;&nbsp; You must not remove this notice, or any other, from this software.</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">ns</font>&nbsp;net.cgrand.enlive-html.state-machine<br>
+&nbsp;&nbsp;<font color="#ffa0a0">&quot;state machine stuff for enlive-html&quot;</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>:refer-clojure</b></font>&nbsp;<font color="#f0e68c"><b>:exclude</b></font>&nbsp;<font color="#ffdead">[</font><font color="#98fb98">complement</font><font color="#ffdead">]))</font><br>
+<br>
+<font color="#87ceeb">;; a state consists of a boolean (acceptance) and a function (from loc to state or nil)</font><br>
+<font color="#87ceeb">;; nil is a valid state, it's the hopeless state</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>s <font color="#ffdead">(</font><font color="#98fb98">create-struct</font>&nbsp;<font color="#f0e68c"><b>:accept</b></font>&nbsp;<font color="#f0e68c"><b>:transition-fn</b></font><font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;state <br>
+&nbsp;&nbsp; <font color="#ffdead">([</font>accept transition-fn<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">struct</font>&nbsp;s accept transition-fn<font color="#ffdead">))</font><br>
+&nbsp;&nbsp; <font color="#ffdead">([</font>accept transition-fn <font color="#ffdead">&amp;</font>&nbsp;etc<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;<font color="#98fb98">assoc</font>&nbsp;<font color="#ffdead">(</font>state accept transition-fn<font color="#ffdead">)</font>&nbsp;etc<font color="#ffdead">))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;accept <font color="#ffdead">(</font>state <font color="#ffa0a0">true</font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">))</font><br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;accept? <font color="#f0e68c"><b>:accept</b></font><font color="#ffdead">)</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;accept <font color="#ffdead">(</font>state <font color="#ffa0a0">true</font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#ffdead">def</font>&nbsp;descendants-or-self<br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>state <font color="#ffa0a0">true</font>&nbsp;<font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>_<font color="#ffdead">]</font>&nbsp;descendants-or-self<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;step<br>
+&nbsp;<font color="#ffa0a0">&quot;Returns the next state.&quot;</font>&nbsp;&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>s loc<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when-let</b></font>&nbsp;<font color="#ffdead">[</font>f <font color="#ffdead">(</font><font color="#f0e68c"><b>:transition-fn</b></font>&nbsp;s<font color="#ffdead">)]</font>&nbsp;<font color="#ffdead">(</font>f loc<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;union <br>
+&nbsp;<font color="#ffa0a0">&quot;Returns a state machine which succeeds as soon as one of the specified state machines succeeds.&quot;</font><br>
+&nbsp;<font color="#ffdead">([]</font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">)</font><br>
+&nbsp;<font color="#ffdead">([</font><font color="#ffdead">&amp;</font>&nbsp;states<font color="#ffdead">]</font><br>
+&nbsp;&nbsp; <font color="#ffdead">(</font>state <font color="#ffdead">(</font><font color="#98fb98">some</font>&nbsp;accept? states<font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>states <font color="#ffdead">(</font><font color="#98fb98">remove</font>&nbsp;<font color="#98fb98">nil?</font>&nbsp;states<font color="#ffdead">)]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>loc<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;union <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;<font color="#ffdead">#(</font>step <font color="#ffdead">%</font>&nbsp;loc<font color="#ffdead">)</font>&nbsp;states<font color="#ffdead">)))))))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;intersection<br>
+&nbsp;<font color="#ffa0a0">&quot;Returns a state machine which succeeds when all specified state machines succeed.&quot;</font><br>
+&nbsp;<font color="#ffdead">([]</font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">)</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">([</font><font color="#ffdead">&amp;</font>&nbsp;states<font color="#ffdead">]</font><br>
+&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#f0e68c"><b>when-not</b></font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">some</font>&nbsp;<font color="#98fb98">nil?</font>&nbsp;states<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font>state <font color="#ffdead">(</font><font color="#98fb98">every?</font>&nbsp;accept? states<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <font color="#ffdead">(</font><font color="#ffdead">fn</font>&nbsp;<font color="#ffdead">[</font>loc<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#98fb98">apply</font>&nbsp;intersection <font color="#ffdead">(</font><font color="#f0e68c"><b>map</b></font>&nbsp;<font color="#ffdead">#(</font>step <font color="#ffdead">%</font>&nbsp;loc<font color="#ffdead">)</font>&nbsp;states<font color="#ffdead">)))))))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;<font color="#98fb98">complement</font>&nbsp;<br>
+&nbsp;<font color="#ffdead">[</font>s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>condp</b></font>&nbsp;<font color="#98fb98">=</font>&nbsp;s<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffa0a0">nil</font>&nbsp;descendants-or-self<br>
+&nbsp;&nbsp;&nbsp;&nbsp;descendants-or-self <font color="#ffa0a0">nil</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>state <font color="#ffdead">(</font><font color="#98fb98">not</font>&nbsp;<font color="#ffdead">(</font>accept? s<font color="#ffdead">))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#98fb98">complement</font>&nbsp;<font color="#ffdead">(</font>step s %<font color="#ffdead">)))))</font><br>
+&nbsp;&nbsp;<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;complement1<br>
+&nbsp;<font color="#ffdead">[</font>s<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>state <font color="#ffdead">(</font>accept? s<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">#(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>s <font color="#ffdead">(</font>step s %<font color="#ffdead">)]</font>&nbsp;<font color="#ffdead">(</font>state <font color="#ffdead">(</font><font color="#98fb98">not</font>&nbsp;<font color="#ffdead">(</font>accept? s<font color="#ffdead">))</font>&nbsp;<font color="#ffa0a0">nil</font><font color="#ffdead">))))</font>&nbsp;<br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;chain<br>
+&nbsp;&nbsp;<font color="#ffdead">([</font>s<font color="#ffdead">]</font>&nbsp;s<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;<font color="#ffdead">([</font>s1 s2<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>when</b></font>&nbsp;s1<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">let</font>&nbsp;<font color="#ffdead">[</font>chained-fn <font color="#ffdead">#(</font>chain <font color="#ffdead">(</font>step s1 %<font color="#ffdead">)</font>&nbsp;s2<font color="#ffdead">)]</font>&nbsp;&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font><font color="#ffdead">if</font>&nbsp;<font color="#ffdead">(</font>accept? s1<font color="#ffdead">)</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>state <font color="#ffdead">(</font>accept? s2<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">#(</font>union <font color="#ffdead">(</font>step s2 %<font color="#ffdead">)</font>&nbsp;<font color="#ffdead">(</font>chained-fn %<font color="#ffdead">)))</font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<font color="#ffdead">(</font>state <font color="#ffa0a0">false</font>&nbsp;chained-fn<font color="#ffdead">)))))</font><br>
+&nbsp;&nbsp;<font color="#ffdead">([</font>s1 s2 <font color="#ffdead">&amp;</font>&nbsp;etc<font color="#ffdead">]</font>&nbsp;<font color="#ffdead">(</font><font color="#f0e68c"><b>reduce</b></font>&nbsp;chain <font color="#ffdead">(</font>chain s1 s2<font color="#ffdead">)</font>&nbsp;etc<font color="#ffdead">)))</font><br>
+<br>
+<font color="#ffdead">(</font><font color="#cd5c5c">defn</font>&nbsp;pred <br>
+&nbsp;<font color="#ffa0a0">&quot;Turns a predicate function on locs into a state-machine that accepts anything that satisfies the predicate.&quot;</font><br>
+&nbsp;<font color="#ffdead">[</font>f<font color="#ffdead">]</font><br>
+&nbsp;&nbsp;<font color="#ffdead">(</font>state <font color="#ffa0a0">false</font>&nbsp;<font color="#ffdead">#(</font><font color="#f0e68c"><b>when-let</b></font>&nbsp;<font color="#ffdead">[</font>a <font color="#ffdead">(</font>f %<font color="#ffdead">)]</font>&nbsp;accept<font color="#ffdead">)))</font><br>
+</font></body>
+</html>
