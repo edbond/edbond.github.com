@@ -1,0 +1,10 @@
+name: conj blog
+tagline: on Ruby, Clojure
+
+permalink: /:categories/:year/:month/:day/:title
+
+exclude: [".rvmrc", ".rbenv-version", "README.md", "Rakefile", "changelog.md"]
+pygments: true
+markdown: redcarpet
+
+production_url : https://edbond.github.com

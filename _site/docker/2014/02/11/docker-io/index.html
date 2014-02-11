@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <title>about Docker</title>
+        <meta name="viewport" content="width=device-width">
+
+        <!-- syntax highlighting CSS -->
+        <link rel="stylesheet" href="/css/syntax.css">
+
+        <!-- Custom CSS -->
+        <link rel="stylesheet" href="/css/main.css">
+
+    </head>
+    <body>
+
+        <div class="site">
+          <div class="header">
+            <h1 class="title"><a href="/">conj blog</a></h1>
+            <a class="extra" href="/">home</a>
+          </div>
+
+          <h2>about Docker</h2>
+<p class="meta">11 Feb 2014</p>
+
+<div class="post">
+<p><a href="http://www.docker.io/">Docker</a> is a lightweight alternative to virtual machines
+like <a href="https://www.virtualbox.org/">VirtualBox</a>.
+It uses linux containers (lxc) and cgroups to separate vm instances
+(called <em>containers</em> in docker). That is a recent Linux features which
+makes kernel <em>3.8</em> a minimum requirement. Containers have their own
+file system, network interfaces, processes. You can expose container
+ports outside
+of container and link containers together.</p>
+
+<p>Images in docker can be build from other images, and containers is a
+snapshots of the image. This allows you to quickly run several
+identical images. Containers can be stored after modification, new
+state will be saved as a diff from original container image.</p>
+
+<p>Although you can log in container and install everything using
+console it is advised to write a script to generate container -
+<strong>Dockerfile</strong>. Docker uses caching and creates a new image after
+each successful step, next run is much faster because such steps are
+skipped and last existing image is used. <em>docker build</em> command is
+used to create an image from Dockerfile.</p>
+
+<p>Docker is not production-ready yet, they target 1.0 somewhere in April
+ 2014. Current version of docker is 0.8. Docker is not running on
+ Windows, MacOS support is very limited.
+There is an <a href="https://index.docker.io/">index site</a> for sharing public images and a server
+for hosting <a href="https://github.com/dotcloud/docker-registry">private repositories</a>.</p>
+
+<p>Containers running a single process (web server, memcached) using CMD
+instruction. Container stops when process stopped.
+It is possible to use <a href="http://docs.docker.io/en/latest/examples/using_supervisord/">supervisor</a> to run several processes in one container.</p>
+
+<p>Here is my current Dockerfile for installing ruby 1.9.3 and gems specified
+in Gemfile.</p>
+
+<div class="highlight"><pre><code class="bash">FROM ubuntu
+MAINTAINER Eduard Bondarenko &lt;eduard@kobemail.com&gt;
+
+ENV RUBY_VERSION 1.9.3
+ENV DEBIAN_FRONTEND noninteractive
+
+<span class="c"># REPOS</span>
+RUN apt-get -y update
+RUN apt-get -y upgrade
+RUN apt-get install -y -q software-properties-common python-software-properties
+RUN add-apt-repository -y <span class="s2">&quot;deb http://archive.ubuntu.com/ubuntu $(lsb_release -sc) universe&quot;</span>
+RUN add-apt-repository -y ppa:chris-lea/node.js
+RUN apt-get -y update
+
+<span class="c"># Ensure UTF-8</span>
+RUN locale-gen en_US.UTF-8
+ENV LANG       en_US.UTF-8
+ENV LC_ALL     en_US.UTF-8
+
+<span class="c"># INSTALL</span>
+RUN apt-get install -y -q build-essential openssl libreadline6 <span class="se">\</span>
+  libreadline6-dev curl git-core zlib1g zlib1g-dev libssl-dev <span class="se">\</span>
+  libyaml-dev libxml2-dev libxslt-dev <span class="se">\</span>
+  autoconf libc6-dev ncurses-dev automake libtool bison <span class="se">\</span>
+  pkg-config make wget unzip git libmagickwand-dev
+
+<span class="c"># RVM</span>
+RUN curl -sL https://get.rvm.io <span class="p">|</span> bash -s stable --auto-dotfiles
+
+ENV PATH /usr/local/rvm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+RUN rvm requirements
+
+<span class="c"># Install ruby</span>
+RUN rvm install ruby-<span class="nv">$RUBY_VERSION</span>
+RUN /bin/bash -l -c <span class="s1">&#39;rvm use $RUBY_VERSION --default&#39;</span>
+
+RUN apt-get clean
+
+<span class="c"># Add local files to container</span>
+ADD . rails
+
+<span class="c"># Forward web server port</span>
+EXPOSE 3000
+
+<span class="c"># Change working dir</span>
+WORKDIR rails
+
+<span class="c"># Install gems</span>
+RUN /bin/bash -l -c <span class="s1">&#39;bundle install&#39;</span>
+
+<span class="c"># Start server</span>
+CMD <span class="o">[</span><span class="s2">&quot;./script/rails s thin&quot;</span><span class="o">]</span>
+</code></pre></div>
+
+<p>Read more about docker on site: <a href="http://www.docker.io/">Docker.io</a></p>
+
+</div>
+
+
+          <div class="footer">
+            <div class="contact">
+              <p>
+                Eduard Bondarenko<br />
+                What You Are<br />
+                edbond@gmail.com
+              </p>
+            </div>
+            <div class="contact">
+              <p>
+                <a href="https://github.com/edbond">github.com/edbond</a><br />
+                <a href="https://twitter.com/edbond">twitter.com/edbond</a><br />
+              </p>
+            </div>
+          </div>
+        </div>
+
+    </body>
+</html>

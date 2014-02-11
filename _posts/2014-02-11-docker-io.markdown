@@ -1,0 +1,103 @@
+---
+layout: post
+title:  "about Docker"
+date:   2014-02-11 14:14:02
+categories: docker
+---
+
+[Docker][docker] is a lightweight alternative to virtual machines
+like [VirtualBox][virtualbox].
+It uses linux containers (lxc) and cgroups to separate vm instances
+(called *containers* in docker). That is a recent Linux features which
+makes kernel *3.8* a minimum requirement. Containers have their own
+file system, network interfaces, processes. You can expose container
+ports outside
+of container and link containers together.
+
+Images in docker can be build from other images, and containers is a
+snapshots of the image. This allows you to quickly run several
+identical images. Containers can be stored after modification, new
+state will be saved as a diff from original container image.
+
+Although you can log in container and install everything using
+console it is advised to write a script to generate container -
+**Dockerfile**. Docker uses caching and creates a new image after
+each successful step, next run is much faster because such steps are
+skipped and last existing image is used. *docker build* command is
+used to create an image from Dockerfile.
+
+Docker is not production-ready yet, they target 1.0 somewhere in April
+ 2014. Current version of docker is 0.8. Docker is not running on
+ Windows, MacOS support is very limited.
+There is an [index site][index] for sharing public images and a server
+for hosting [private repositories][private].
+
+Containers running a single process (web server, memcached) using CMD
+instruction. Container stops when process stopped.
+It is possible to use [supervisor][supervisor] to run several processes in one container.
+
+Here is my current Dockerfile for installing ruby 1.9.3 and gems specified
+in Gemfile.
+
+{% highlight bash %}
+FROM ubuntu
+MAINTAINER Eduard Bondarenko <eduard@kobemail.com>
+
+ENV RUBY_VERSION 1.9.3
+ENV DEBIAN_FRONTEND noninteractive
+
+# REPOS
+RUN apt-get -y update
+RUN apt-get -y upgrade
+RUN apt-get install -y -q software-properties-common python-software-properties
+RUN add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu $(lsb_release -sc) universe"
+RUN add-apt-repository -y ppa:chris-lea/node.js
+RUN apt-get -y update
+
+# Ensure UTF-8
+RUN locale-gen en_US.UTF-8
+ENV LANG       en_US.UTF-8
+ENV LC_ALL     en_US.UTF-8
+
+# INSTALL
+RUN apt-get install -y -q build-essential openssl libreadline6 \
+  libreadline6-dev curl git-core zlib1g zlib1g-dev libssl-dev \
+  libyaml-dev libxml2-dev libxslt-dev \
+  autoconf libc6-dev ncurses-dev automake libtool bison \
+  pkg-config make wget unzip git libmagickwand-dev
+
+# RVM
+RUN curl -sL https://get.rvm.io | bash -s stable --auto-dotfiles
+
+ENV PATH /usr/local/rvm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+RUN rvm requirements
+
+# Install ruby
+RUN rvm install ruby-$RUBY_VERSION
+RUN /bin/bash -l -c 'rvm use $RUBY_VERSION --default'
+
+RUN apt-get clean
+
+# Add local files to container
+ADD . rails
+
+# Forward web server port
+EXPOSE 3000
+
+# Change working dir
+WORKDIR rails
+
+# Install gems
+RUN /bin/bash -l -c 'bundle install'
+
+# Start server
+CMD ["./script/rails s thin"]
+{% endhighlight %}
+
+Read more about docker on site: [Docker.io][docker]
+
+[docker]: http://www.docker.io/
+[virtualbox]: https://www.virtualbox.org/
+[index]: https://index.docker.io/
+[private]: https://github.com/dotcloud/docker-registry
+[supervisor]: http://docs.docker.io/en/latest/examples/using_supervisord/
